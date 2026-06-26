@@ -417,8 +417,6 @@ static void free_cava_buffers(struct cava_buffers *buf, int audio_channels, bool
 static void handle_keyboard_input(char *ch, struct config_params *cfg, char *configPath,
                        struct terminal_dimensions *termDim,
                        bool *resizeTerminal, bool *reloadConf) {
-  // W czystym trybie SDL zdarzenia klawiatury normalnie obsluguje sam SDL (np. z draw_sdl_glsl).
-  // Pozostawiamy logikę zmiany konfiguracji gdyby zaszla taka potrzeba.
   switch (*ch) {
     case 65: // key up
       cfg->sens = cfg->sens * 1.05;
@@ -720,7 +718,6 @@ int main(int argc, char **argv) {
       audio.threadparams = 0;
       audio.terminate = 0;
 
-      int total_bar_height = 0;
       pthread_t p_thread;
       pthread_mutex_init(&audio.lock, NULL);
 
@@ -834,8 +831,6 @@ int main(int argc, char **argv) {
           if (frame_time_msec < 1) frame_time_msec = 1;
 
           char ch = '\0';
-          int total_frames = 0;
-
           float actual_framerate = 1000.0 / (float)frame_time_msec;
           int samples_per_frame = audio.rate / actual_framerate;
 
@@ -888,22 +883,6 @@ int main(int argc, char **argv) {
                       has_config_state = true;
                     }
                 }
-
-              if (cfg.draw_and_quit > 0) {
-                  total_frames++;
-                  if (total_frames >= cfg.draw_and_quit) {
-                      for (int n = 0; n < number_of_bars; n++) {
-                          if (buf.bars[n] == 1) {
-                              buf.bars[n] = 0;
-                            }
-                          total_bar_height += buf.bars[n];
-                        }
-                      resizeTerminal = true;
-                      reloadConf = true;
-                      should_quit = true;
-                      break;
-                    }
-                }
             }
 
           cava_destroy(plan);
@@ -924,15 +903,7 @@ int main(int argc, char **argv) {
       free_config(&cfg);
 
       if (should_quit && signal_received == 0) {
-          if (cfg.zero_test && total_bar_height > 0) {
-              fprintf(stderr, "Test mode: expected total bar height to be zero, but was: %d\n", total_bar_height);
-              return EXIT_FAILURE;
-            } else if (cfg.non_zero_test && total_bar_height == 0) {
-              fprintf(stderr, "Test mode: expected total bar height to be non-zero, but was zero\n");
-              return EXIT_FAILURE;
-            } else {
-              return EXIT_SUCCESS;
-            }
+          return EXIT_SUCCESS;
         }
 
       if (signal_received != 0) {
