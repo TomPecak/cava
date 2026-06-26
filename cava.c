@@ -666,6 +666,20 @@ static void format_and_filter_bars(struct cava_buffers *buf, struct config_param
     }
 }
 
+static int update_bars_and_check_repaint(struct cava_buffers *buf, int number_of_bars) {
+  int re_paint = 0;
+  for (int n = 0; n < number_of_bars; n++) {
+      // Skalowanie wartości zmiennoprzecinkowych dla SDL GLSL
+      buf->bars[n] = buf->bars_raw[n] * 1000;
+
+      // Jeśli wartość się zmieniła względem poprzedniej klatki, oznacz do przerysowania
+      if (buf->bars[n] != buf->previous_frame[n]) {
+          re_paint = 1;
+        }
+    }
+  return re_paint;
+}
+
 int main(int argc, char **argv) {
   struct config_params cfg;
   memset(&cfg, 0, sizeof(cfg));
@@ -853,13 +867,9 @@ int main(int argc, char **argv) {
               process_audio_chunk(&audio, &cfg, &buf, plan, high_framerate, samples_per_frame, audio_channels, number_of_bars);
               format_and_filter_bars(&buf, &cfg, &termDim, raw_number_of_bars, number_of_bars, audio_channels, output_channels, userEQ_keys_to_bars_ratio);
 
-              int re_paint = 0;
-              for (int n = 0; n < number_of_bars; n++) {
-                  buf.bars[n] = buf.bars_raw[n] * 1000; // uzywane dla SDL GLSL zeby sprawdzic zmiany
-                  if (buf.bars[n] != buf.previous_frame[n])
-                    re_paint = 1;
-                }
+              int re_paint = update_bars_and_check_repaint(&buf, number_of_bars);
 
+              //render and wait for v-sync
               int rc = render_output(&cfg, &buf, number_of_bars, frame_time_msec, re_paint);
 
               if (rc == -1) resizeTerminal = true;
