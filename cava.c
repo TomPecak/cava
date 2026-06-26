@@ -50,19 +50,8 @@
 #include "input/common.h"
 
 #ifndef _WIN32
-#include "input/alsa.h"
-#include "input/coreaudio.h"
-#include "input/fifo.h"
-#include "input/jack.h"
-#include "input/oss.h"
+// Zostawiamy tylko nowoczesny Pipewire dla Linuxa
 #include "input/pipewire.h"
-#include "input/portaudio.h"
-#include "input/pulse.h"
-#include "input/shmem.h"
-#include "input/sndio.h"
-#ifdef COREAUDIO_TAP
-#include "input/coreaudio_tap.h"
-#endif
 #endif
 
 #ifdef __GNUC__
@@ -230,22 +219,6 @@ void sig_handler(int sig_no) {
 #endif
 }
 
-#ifdef ALSA
-static bool is_loop_device_for_sure(const char *text) {
-  const char *const LOOPBACK_DEVICE_PREFIX = "hw:Loopback,";
-  return strncmp(text, LOOPBACK_DEVICE_PREFIX, strlen(LOOPBACK_DEVICE_PREFIX)) == 0;
-}
-
-static bool directory_exists(const char *path) {
-  DIR *const dir = opendir(path);
-  if (dir == NULL)
-    return false;
-
-  closedir(dir);
-  return true;
-}
-#endif
-
 float *monstercat_filter(float *bars, int number_of_bars, int waves, double monstercat,
                    int height) {
   int z;
@@ -354,95 +327,6 @@ static void start_audio_thread(struct config_params *cfg, struct audio_data *aud
 
   switch (cfg->input) {
 #ifndef _WIN32
-#ifdef ALSA
-    case INPUT_ALSA:
-      if (is_loop_device_for_sure(audio->source)) {
-          if (directory_exists("/sys/")) {
-              if (!directory_exists("/sys/module/snd_aloop/")) {
-                  cleanup();
-                  fprintf(stderr, "Linux kernel module \"snd_aloop\" does not seem to be loaded.\n");
-                  exit(EXIT_FAILURE);
-                }
-            }
-        }
-      thr_id = pthread_create(p_thread, NULL, input_alsa, (void *)audio);
-      break;
-#endif
-    case INPUT_FIFO:
-      audio->rate = cfg->samplerate;
-      audio->format = cfg->samplebits;
-      thr_id = pthread_create(p_thread, NULL, input_fifo, (void *)audio);
-      break;
-#ifdef PULSE
-    case INPUT_PULSE:
-      audio->format = 16;
-      audio->rate = 44100;
-      if (strcmp(audio->source, "auto") == 0) {
-          getPulseDefaultSink((void *)audio);
-        }
-      thr_id = pthread_create(p_thread, NULL, input_pulse, (void *)audio);
-      break;
-#endif
-#ifdef SNDIO
-    case INPUT_SNDIO:
-      audio->format = cfg->samplebits;
-      audio->rate = cfg->samplerate;
-      audio->channels = cfg->channels;
-      audio->threadparams = 1;
-      thr_id = pthread_create(p_thread, NULL, input_sndio, (void *)audio);
-      break;
-#endif
-#ifdef OSS
-    case INPUT_OSS:
-      audio->format = cfg->samplebits;
-      audio->rate = cfg->samplerate;
-      audio->channels = cfg->channels;
-      audio->threadparams = 1;
-      thr_id = pthread_create(p_thread, NULL, input_oss, (void *)audio);
-      break;
-#endif
-#ifdef JACK
-    case INPUT_JACK:
-      audio->channels = cfg->channels;
-      audio->autoconnect = cfg->autoconnect;
-      audio->threadparams = 1;
-      thr_id = pthread_create(p_thread, NULL, input_jack, (void *)audio);
-      break;
-#endif
-    case INPUT_SHMEM:
-      audio->format = 16;
-      thr_id = pthread_create(p_thread, NULL, input_shmem, (void *)audio);
-      break;
-#ifdef PORTAUDIO
-    case INPUT_PORTAUDIO:
-      audio->format = 16;
-      audio->rate = 44100;
-      audio->threadparams = 1;
-      if (!strcmp(audio->source, "list")) {
-          input_portaudio((void *)audio);
-        } else {
-          thr_id = pthread_create(p_thread, NULL, input_portaudio, (void *)audio);
-        }
-      break;
-#endif
-#ifdef COREAUDIO
-    case INPUT_COREAUDIO:
-      audio->format = cfg->samplebits;
-      audio->rate = cfg->samplerate;
-      audio->channels = cfg->channels;
-      audio->threadparams = 1;
-      if (!strcmp(audio->source, "list")) {
-          input_coreaudio((void *)audio);
-#ifdef COREAUDIO_TAP
-        } else if (coreaudio_tap_source_enabled(audio->source)) {
-          thr_id = pthread_create(p_thread, NULL, input_coreaudio_tap, (void *)audio);
-#endif
-        } else {
-          thr_id = pthread_create(p_thread, NULL, input_coreaudio, (void *)audio);
-        }
-      break;
-#endif
-#ifdef PIPEWIRE
     case INPUT_PIPEWIRE:
       audio->format = cfg->samplebits;
       audio->rate = cfg->samplerate;
@@ -452,15 +336,15 @@ static void start_audio_thread(struct config_params *cfg, struct audio_data *aud
       audio->virtual_node = cfg->virtual_node;
       thr_id = pthread_create(p_thread, NULL, input_pipewire, (void *)audio);
       break;
-#endif
-#endif
-#ifdef _WIN32
+#else
     case INPUT_WINSCAP:
       thr_id = pthread_create(p_thread, NULL, input_winscap, (void *)audio);
       break;
 #endif
     default:
-      exit(EXIT_FAILURE); // Can't happen.
+      cleanup();
+      fprintf(stderr, "Unsupported or misconfigured audio input backend.\n");
+      exit(EXIT_FAILURE);
     }
 
   timeout_counter = 0;
@@ -801,8 +685,13 @@ int main(int argc, char **argv) {
           exit(EXIT_FAILURE);
         }
 
-             // Wymuszenie trybu SDL GLSL niezaleznie od tego co jest w konfiguracji
+             // Wymuszenie trybu SDL GLSL
       cfg.output = OUTPUT_SDL_GLSL;
+#ifndef _WIN32
+      cfg.input = INPUT_PIPEWIRE;
+#else
+      cfg.input = INPUT_WINSCAP;
+#endif
 
       time_t config_mtime = 0;
       long long config_size = 0;
@@ -867,6 +756,7 @@ int main(int argc, char **argv) {
 
       init_sdl_glsl_window(cfg.sdl_width, cfg.sdl_height, cfg.sdl_x, cfg.sdl_y, cfg.sdl_full_screen,
                             cfg.vertex_shader, cfg.fragment_shader);
+
       termDim.height = cfg.sdl_height;
       termDim.width = cfg.sdl_width;
       *termDim.dim_val = 1;
