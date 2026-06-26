@@ -481,7 +481,7 @@ static void handle_keyboard_input(char *ch, struct config_params *cfg, char *con
           cleanup();
           exit(EXIT_FAILURE);
         }
-      if (!load_colors(themeFile, (void *)cfg, &error)) {
+      if (!load_colors(themeFile, cfg, &error)) {
           cleanup();
           free(themeFile);
           fprintf(stderr, "Error loading config. %s", error.message);
@@ -715,7 +715,7 @@ int main(int argc, char **argv) {
       struct audio_data audio;
       memset(&audio, 0, sizeof(audio));
 
-      audio.source = malloc(1 + strlen(cfg.audio_source));
+      audio.source = (char *)malloc(1 + strlen(cfg.audio_source));
       strcpy(audio.source, cfg.audio_source);
 
       audio.format = -1;

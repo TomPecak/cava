@@ -90,7 +90,7 @@ else()
 	endif()
 
 	add_executable(cava
-		cava.c
+		cava.cpp
 		config.c
 		input/common.c
 		input/fifo.c

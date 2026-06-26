@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -156,3 +160,7 @@ bool load_colors(char *themeFile, struct config_params *p, struct error_s *error
 void free_config(struct config_params *p);
 bool get_themeFile(char configPath[PATH_MAX], struct config_params *p, char *cava_config_home,
                    struct error_s *error, char **themeFile);
+
+#ifdef __cplusplus
+}
+#endif
